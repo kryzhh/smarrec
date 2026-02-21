@@ -55,6 +55,7 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+temp
 
 # ===============================
 # Testing / Temp
@@ -63,3 +64,4 @@ Thumbs.db
 *.bak
 *.old
 *.sqlite3
+*.img
