@@ -33,7 +33,7 @@ def main():
         print(f"Disk SHA256: {disk_sha256}")
 
     # Create carver
-    carver = FileCarver(str(image_path), str(output_dir))
+    carver = FileCarver(str(image_path), str(output_dir), verbose=args.verbose)
 
     # Carve files
     jpeg_files = carver.carve_jpeg()
@@ -43,43 +43,65 @@ def main():
     all_files = jpeg_files + pdf_files + png_files + video_files
 
     # Process each file: entropy, repair, AI
-    for file_meta in all_files:
+    for i, file_meta in enumerate(all_files):
+        if args.verbose and (i % 10 == 0 or i == len(all_files) - 1):
+            print(f"Processing file {i+1}/{len(all_files)}: {file_meta['file_name']}")
+        
         file_path = output_dir / file_meta['file_name']
-        with open(file_path, 'rb') as f:
-            data = f.read()
-        entropy = shannon_entropy(data)
+        entropy = shannon_entropy(str(file_path))
         file_meta['entropy'] = entropy
+        if args.verbose:
+            print(f"  Entropy: {entropy:.4f}")
 
         # Repair for JPEG
         if file_meta['file_type'] == 'jpeg':
             repair_result = repair_jpeg(file_path)
             file_meta.update(repair_result)
+            if args.verbose:
+                print(f"  Repair: {repair_result}")
         elif file_meta['file_type'] == 'png':
             # For PNG, just validate
-            try:
-                with Image.open(file_path) as img:
-                    img.verify()
+            if file_meta['size'] > 50 * 1024 * 1024:  # 50MB
                 file_meta['repair_attempted'] = False
-                file_meta['repair_actions'] = []
-                file_meta['decode_success'] = True
-            except Exception:
-                file_meta['repair_attempted'] = False
-                file_meta['repair_actions'] = []
+                file_meta['repair_actions'] = ["Skipped validation for large file"]
                 file_meta['decode_success'] = False
+                if args.verbose:
+                    print(f"  Validation: Skipped for large file")
+            else:
+                try:
+                    with Image.open(file_path) as img:
+                        img.verify()
+                    file_meta['repair_attempted'] = False
+                    file_meta['repair_actions'] = []
+                    file_meta['decode_success'] = True
+                    if args.verbose:
+                        print(f"  Validation: Success")
+                except Exception:
+                    file_meta['repair_attempted'] = False
+                    file_meta['repair_actions'] = []
+                    file_meta['decode_success'] = False
+                    if args.verbose:
+                        print(f"  Validation: Failed")
         else:
             file_meta['repair_attempted'] = False
             file_meta['repair_actions'] = []
             file_meta['decode_success'] = True  # Assume PDF and videos are ok
+            if args.verbose:
+                print(f"  Repair: Skipped for {file_meta['file_type']}")
 
         # AI analysis
         if args.ai_mode == 'cloud':
             ai_result = call_ai(file_meta)
             file_meta['ai_analysis'] = ai_result
+            if args.verbose:
+                print(f"  AI Analysis: {ai_result}")
         else:
             file_meta['ai_analysis'] = None
 
         # Final SHA256
         file_meta['final_sha256'] = sha256_file(str(file_path))
+        if args.verbose:
+            print(f"  SHA256: {file_meta['final_sha256']}")
 
     end_time = datetime.now().isoformat()
 

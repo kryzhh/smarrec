@@ -13,13 +13,15 @@ PNG_END = b'IEND'  # PNG IEND chunk (plus 4 bytes CRC, but approximate)
 
 CHUNK_SIZE = 64 * 1024 * 1024  # 64MB chunks
 OVERLAP = 1024 * 1024  # 1MB overlap
+WRITE_CHUNK_SIZE = 1 * 1024 * 1024  # 1MB write chunks
 
 
 class FileCarver:
-    def __init__(self, image_path: str, output_dir: str):
+    def __init__(self, image_path: str, output_dir: str, verbose: bool = False):
         self.image_path = Path(image_path)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.verbose = verbose
 
     def carve_jpeg(self) -> List[Dict[str, Any]]:
         recovered_files = []
@@ -73,6 +75,8 @@ class FileCarver:
                             "size": size
                         }
                         recovered_files.append(metadata)
+                        if self.verbose:
+                            print(f"Carved JPEG: {output_file.name}, size: {size} bytes")
                         recovered_count += 1
 
                     chunk_pos = soi_rel + 1
@@ -135,6 +139,8 @@ class FileCarver:
                             "size": size
                         }
                         recovered_files.append(metadata)
+                        if self.verbose:
+                            print(f"Carved PDF: {output_file.name}, size: {size} bytes")
                         recovered_count += 1
 
                     chunk_pos = pdf_rel + 1
@@ -197,6 +203,8 @@ class FileCarver:
                             "size": size
                         }
                         recovered_files.append(metadata)
+                        if self.verbose:
+                            print(f"Carved PNG: {output_file.name}, size: {size} bytes")
                         recovered_count += 1
 
                     chunk_pos = png_rel + 1
@@ -238,35 +246,42 @@ class FileCarver:
         for i, start_pos in enumerate(ftyp_positions):
             end_pos = ftyp_positions[i + 1] if i + 1 < len(ftyp_positions) else file_size
 
-            with open(self.image_path, "rb") as f:
-                f.seek(start_pos)
-                video_data = f.read(end_pos - start_pos)
-                size = len(video_data)
+            size = end_pos - start_pos
+            if size < 2048:
+                continue
 
-                if size < 2048:
-                    continue
-
-                # Determine type
-                if start_pos + 8 < file_size:
+            # Determine type
+            if start_pos + 8 < file_size:
+                with open(self.image_path, "rb") as f:
                     f.seek(start_pos + 4)
                     brand = f.read(4)
-                    file_type = 'mov' if brand == b'qt  ' else 'mp4'
-                else:
-                    file_type = 'mp4'
+                file_type = 'mov' if brand == b'qt  ' else 'mp4'
+            else:
+                file_type = 'mp4'
 
-                output_file = self.output_dir / f"recovered_{recovered_count}.{file_type}"
-                with open(output_file, "wb") as out:
-                    out.write(video_data)
+            output_file = self.output_dir / f"recovered_{recovered_count}.{file_type}"
+            with open(output_file, "wb") as out:
+                with open(self.image_path, "rb") as f:
+                    f.seek(start_pos)
+                    remaining = size
+                    while remaining > 0:
+                        chunk = f.read(min(WRITE_CHUNK_SIZE, remaining))
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                        remaining -= len(chunk)
 
-                metadata = {
-                    "file_name": output_file.name,
-                    "file_type": file_type,
-                    "offset_start": start_pos,
-                    "offset_end": end_pos - 1,
-                    "size": size
-                }
-                recovered_files.append(metadata)
-                recovered_count += 1
+            metadata = {
+                "file_name": output_file.name,
+                "file_type": file_type,
+                "offset_start": start_pos,
+                "offset_end": end_pos - 1,
+                "size": size
+            }
+            recovered_files.append(metadata)
+            if self.verbose:
+                print(f"Carved {file_type.upper()}: {output_file.name}, size: {size} bytes")
+            recovered_count += 1
 
         # AVI carving
         avi_count = recovered_count
@@ -294,14 +309,18 @@ class FileCarver:
                             if end_pos > file_size:
                                 end_pos = file_size
 
-                            f.seek(abs_pos)
-                            avi_data = f.read(end_pos - abs_pos)
-                            size = len(avi_data)
-
+                            size = end_pos - abs_pos
                             if size >= 2048:
                                 output_file = self.output_dir / f"recovered_{avi_count}.avi"
                                 with open(output_file, "wb") as out:
-                                    out.write(avi_data)
+                                    f.seek(abs_pos)
+                                    remaining = size
+                                    while remaining > 0:
+                                        chunk = f.read(min(WRITE_CHUNK_SIZE, remaining))
+                                        if not chunk:
+                                            break
+                                        out.write(chunk)
+                                        remaining -= len(chunk)
 
                                 metadata = {
                                     "file_name": output_file.name,
@@ -311,6 +330,8 @@ class FileCarver:
                                     "size": size
                                 }
                                 recovered_files.append(metadata)
+                                if self.verbose:
+                                    print(f"Carved AVI: {output_file.name}, size: {size} bytes")
                                 avi_count += 1
 
                     chunk_pos = rel + 1
