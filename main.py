@@ -36,44 +36,14 @@ def main():
     carver = FileCarver(str(image_path), str(output_dir))
 
     # Carve files
-    if args.verbose:
-        print("Starting file carving process...")
-    
-    if args.verbose:
-        print("Carving JPEG files...")
     jpeg_files = carver.carve_jpeg()
-    if args.verbose:
-        print(f"Recovered {len(jpeg_files)} JPEG files")
-    
-    if args.verbose:
-        print("Carving PDF files...")
     pdf_files = carver.carve_pdf()
-    if args.verbose:
-        print(f"Recovered {len(pdf_files)} PDF files")
-    
-    if args.verbose:
-        print("Carving PNG files...")
     png_files = carver.carve_png()
-    if args.verbose:
-        print(f"Recovered {len(png_files)} PNG files")
-    
-    if args.verbose:
-        print("Carving video files...")
     video_files = carver.carve_video()
-    if args.verbose:
-        print(f"Recovered {len(video_files)} video files")
-    
     all_files = jpeg_files + pdf_files + png_files + video_files
 
-    if args.verbose:
-        print(f"Total files recovered: {len(all_files)}")
-        print("Processing files for entropy, repair, and AI analysis...")
-
     # Process each file: entropy, repair, AI
-    for i, file_meta in enumerate(all_files):
-        if args.verbose and (i % 10 == 0 or i == len(all_files) - 1):
-            print(f"Processing file {i+1}/{len(all_files)}: {file_meta['file_name']}")
-        
+    for file_meta in all_files:
         file_path = output_dir / file_meta['file_name']
         with open(file_path, 'rb') as f:
             data = f.read()
@@ -113,13 +83,9 @@ def main():
 
     end_time = datetime.now().isoformat()
 
-    if args.verbose:
-        print("Logging recovery data...")
     # Log JSON
     log_recovery(args.case_id, disk_sha256, all_files, output_dir, start_time, end_time)
 
-    if args.verbose:
-        print("Generating PDF report...")
     # Generate PDF
     generate_pdf_report(args.case_id, disk_sha256, all_files, output_dir)
 
