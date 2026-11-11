@@ -51,7 +51,6 @@ Thumbs.db
 # ===============================
 # IDE / Editors
 # ===============================
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -65,3 +64,4 @@ temp
 *.old
 *.sqlite3
 *.img
+test_repair_logic.py
